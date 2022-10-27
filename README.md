@@ -1,2 +1,2 @@
 # AzSHCI-VirtualGuide
-Prep an ASZ cluster for deployment using an Azure VM
+Prep an 23H2 HCI cluster for deployment using an Azure VM
