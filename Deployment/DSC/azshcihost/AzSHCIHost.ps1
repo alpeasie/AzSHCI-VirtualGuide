@@ -7,7 +7,7 @@ configuration AzSHCIHost
     [String]$targetDrive = "D",
     [String]$targetVMPath = "$targetDrive" + ":\VMs",
     #[String]$build_source="https://github.com/microsoft/AzStackHCISandbox/raw/main/Sandbox/Sandbox.zip",
-    [String]$predeploy_source="https://github.com/microsoft/AzStackHCISandbox/raw/main/Sandbox/Sandbox.zip",
+    [String]$predeploy_source="https://raw.githubusercontent.com/alpeasie/AzSHCI-VirtualGuide/main/Deployment/PostDSC/PrepHostForDeployment.ps1",
 
     #[Parameter(Mandatory)]
     #[String]$ashci_uri="https://aka.ms/AAbbhkn",
