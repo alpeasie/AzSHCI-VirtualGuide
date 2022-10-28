@@ -16,13 +16,13 @@ configuration AzSHCIHost
 
     [String]$server2019_uri="https://aka.ms/AAbclsv",
     [String]$wacUri = "https://aka.ms/wacdownload"
-    
+    )
     Import-DscResource -ModuleName 'PSDesiredStateConfiguration'
     Import-DscResource -ModuleName 'xPSDesiredStateConfiguration'
     Import-DscResource -ModuleName 'xCredSSP'
     Import-DscResource -ModuleName 'DSCR_Shortcut'
     Import-DscResource -ModuleName 'cChoco'
-    )
+    
     
 
     #$aszhciHostsMofUri = "https://raw.githubusercontent.com/Azure/AzureStackHCI-EvalGuide/main/deployment/helpers/Install-AzsRolesandFeatures.ps1"
