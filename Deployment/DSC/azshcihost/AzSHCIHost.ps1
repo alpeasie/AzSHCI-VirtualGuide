@@ -2,7 +2,7 @@ configuration AzSHCIHost
 {
     param ( 
     #[Parameter(Mandatory)]
-    [System.Management.Automation.PSCredential]$Admincreds,
+    #[System.Management.Automation.PSCredential]$Admincreds,
     [String]$targetDrive = "D",
     [String]$targetVMPath = "$targetDrive" + ":\VMs",
     #[String]$build_source="https://github.com/microsoft/AzStackHCISandbox/raw/main/Sandbox/Sandbox.zip",
@@ -286,28 +286,28 @@ configuration AzSHCIHost
 
        #### INSTALL CHOCO, DEPLOY EDGE and Shortcuts
 
-        cChocoInstaller InstallChoco {
-            InstallDir = "c:\choco"
-        }
+        # cChocoInstaller InstallChoco {
+        #     InstallDir = "c:\choco"
+        # }
             
-        cChocoFeature allowGlobalConfirmation {
-            FeatureName = "allowGlobalConfirmation"
-            Ensure      = 'Present'
-            DependsOn   = '[cChocoInstaller]installChoco'
-        }
+        # cChocoFeature allowGlobalConfirmation {
+        #     FeatureName = "allowGlobalConfirmation"
+        #     Ensure      = 'Present'
+        #     DependsOn   = '[cChocoInstaller]installChoco'
+        # }
         
-        cChocoFeature useRememberedArgumentsForUpgrades {
-            FeatureName = "useRememberedArgumentsForUpgrades"
-            Ensure      = 'Present'
-            DependsOn   = '[cChocoInstaller]installChoco'
-        }
+        # cChocoFeature useRememberedArgumentsForUpgrades {
+        #     FeatureName = "useRememberedArgumentsForUpgrades"
+        #     Ensure      = 'Present'
+        #     DependsOn   = '[cChocoInstaller]installChoco'
+        # }
         
-        cChocoPackageInstaller "Install Chromium Edge" {
-            Name        = 'microsoft-edge'
-            Ensure      = 'Present'
-            AutoUpgrade = $true
-            DependsOn   = '[cChocoInstaller]installChoco'
-        }
+        # cChocoPackageInstaller "Install Chromium Edge" {
+        #     Name        = 'microsoft-edge'
+        #     Ensure      = 'Present'
+        #     AutoUpgrade = $true
+        #     DependsOn   = '[cChocoInstaller]installChoco'
+        # }
 
 
     }
