@@ -463,7 +463,7 @@ configuration AzSHCIHost
         #     Icon      = 'shell32.dll,34'
         # }
 
-
+    }
 }
         #### CUSTOM FIREWALL BASED ON ARM TEMPLATE ####
 
