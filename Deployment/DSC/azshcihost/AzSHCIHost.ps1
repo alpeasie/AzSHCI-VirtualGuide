@@ -3,7 +3,7 @@ configuration AzSHCIHost
     param ( 
     #[Parameter(Mandatory)]
     [System.Management.Automation.PSCredential]$Admincreds,
-    [String]$targetDrive = "D",
+    [String]$targetDrive = "V",
     [String]$targetVMPath = "$targetDrive" + ":\VMs",
     #[String]$build_source="https://github.com/microsoft/AzStackHCISandbox/raw/main/Sandbox/Sandbox.zip",
     [String]$predeploy_source="https://raw.githubusercontent.com/alpeasie/AzSHCI-VirtualGuide/main/Deployment/PostDSC/PrepHostForDeployment.ps1",
