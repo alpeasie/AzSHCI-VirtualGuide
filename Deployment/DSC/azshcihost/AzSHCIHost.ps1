@@ -1,7 +1,6 @@
 configuration AzSHCIHost
 {
-    param 
-    ( 
+    param ( 
     #[Parameter(Mandatory)]
     [System.Management.Automation.PSCredential]$Admincreds,
     [String]$targetDrive = "D",
@@ -17,14 +16,13 @@ configuration AzSHCIHost
     [String]$server2019_uri="https://aka.ms/AAbclsv",
     [String]$wacUri = "https://aka.ms/wacdownload"
     )
+
     Import-DscResource -ModuleName 'PSDesiredStateConfiguration'
     Import-DscResource -ModuleName 'xPSDesiredStateConfiguration'
     Import-DscResource -ModuleName 'xCredSSP'
     Import-DscResource -ModuleName 'DSCR_Shortcut'
     Import-DscResource -ModuleName 'cChoco'
     
-    
-
     #$aszhciHostsMofUri = "https://raw.githubusercontent.com/Azure/AzureStackHCI-EvalGuide/main/deployment/helpers/Install-AzsRolesandFeatures.ps1"
     #$updateAdUri = "https://raw.githubusercontent.com/Azure/AzureStackHCI-EvalGuide/main/deployment/helpers/Update-AD.ps1"
     #$regHciUri = "https://raw.githubusercontent.com/Azure/AzureStackHCI-EvalGuide/main/deployment/helpers/Register-AzSHCI.ps1"
