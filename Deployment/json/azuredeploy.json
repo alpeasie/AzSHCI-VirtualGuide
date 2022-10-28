@@ -278,7 +278,7 @@
     "variables": {
                 "dataDisksCount": 4,
                 "dscUri": "https://github.com/alpeasie/AzSHCI-VirtualGuide/blob/main/Deployment/DSC/azshcihost.zip?raw=true",
-                "artifactsLocation": "https://raw.githubusercontent.com/alpeasie/AzSHCI-VirtualGuide/main/Deployment",
+                "artifactsLocation": "https://raw.githubusercontent.com/alpeasie/AzSHCI-VirtualGuide/main/Deployment/",
                 "randomGUID": "[substring(uniqueString(subscription().subscriptionId, resourceGroup().id, parameters('virtualMachineName')),0,6)]",
                 "dnsNameForPublicIP": "[toLower(concat(parameters('virtualMachineName'), variables('randomGUID')))]",
                 "virtualNetworkName": "AzSHCILabvNet",
