@@ -46,7 +46,6 @@ configuration AzSHCIHost
             ConfigurationMode  = 'ApplyOnly'
         }
 
-        #Windows Features Installations from Michael 
         WindowsFeature Hyper-V {
             Ensure = 'Present'
             Name = "Hyper-V"
@@ -96,7 +95,7 @@ configuration AzSHCIHost
         xRemoteFile "Server2019VHD"{
             uri=$server2019_uri
             DestinationPath="$env:SystemDrive\VHDs\GUI.vhdx"
-            DependsOn="[File]Deploy"
+            DependsOn="[File]VHDs"
         }
    
         # Uncomment when HCI iso is public 
@@ -140,7 +139,7 @@ configuration AzSHCIHost
         xRemoteFile "WAC_Source"{
             uri=$wacURI
             DestinationPath="$env:SystemDrive\Apps\WindowsAdminCenter.msi"
-            DependsOn="[Archive]Apps"
+            DependsOn="[File]Apps"
         }
 
         # cShortcut "Wac Shortcut"
