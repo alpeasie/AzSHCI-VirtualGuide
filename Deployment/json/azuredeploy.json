@@ -465,10 +465,9 @@
                     {
                     "type": "extensions",
                     "name": "ConfigureAzSHciHost",
-                    "apiVersion": "2020-12-01",
+                    "apiVersion": "2021-03-01",
                     "location": "[resourceGroup().location]",
-                    "dependsOn": [
-                        "[parameters('virtualMachineName')]" ],
+                    "dependsOn": ["[parameters('virtualMachineName')]" ],
                     "properties": {
                         "publisher": "Microsoft.Powershell",
                         "type": "DSC",
