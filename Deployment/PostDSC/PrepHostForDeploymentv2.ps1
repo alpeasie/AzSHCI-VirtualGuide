@@ -31,6 +31,204 @@ Add-NetNatStaticMapping -NatName $NatNetworkName -ExternalIPAddress 0.0.0.0 -Int
 # Create DC
 
 ### Run DC script ###
+$vmname = "DC01"
+
+### Create Differencing disk for DC
+
+$parentDisk = "C:\VHDs\GUI.vhdx"
+New-VHD -Differencing -ParentPath $parentDisk -Path "V:\VMs\$vmname\Virtual Hard Disks\$vmname.vhdx"
+
+
+### Create the Domain Controller ###
+
+New-VM `
+    -Name $vmname `
+    -MemoryStartupBytes 4GB `
+    -SwitchName "InternalDemo" `
+    -Path "V:\VMs\" `
+    -VHDPath "V:\VMs\$vmname\Virtual Hard Disks\$vmname.vhdx" `
+    -Generation 2
+
+Set-VMMemory DC01 -DynamicMemoryEnabled $true -MinimumBytes 1GB -StartupBytes 4GB -MaximumBytes 4GB
+
+
+Start-Sleep -Seconds 5
+
+
+# INJECT ANSWER FILE
+
+
+Write-Verbose "Mounting Disk Image and Injecting Answer File into the $vmname VM." 
+New-Item -Path "C:\TempBGPMount" -ItemType Directory | Out-Null
+Mount-WindowsImage -Path "C:\TempBGPMount" -Index 1 -ImagePath ("V:\VMs\$vmname\Virtual Hard Disks\$vmname.vhdx") | Out-Null
+
+New-Item -Path C:\TempBGPMount\windows -ItemType Directory -Name Panther -Force | Out-Null
+
+
+$Unattend = @"
+<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+    <servicing>
+        <package action="configure">
+            <assemblyIdentity name="Microsoft-Windows-Foundation-Package" version="10.0.14393.0" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="" />
+            <selection name="ADCertificateServicesRole" state="true" />
+            <selection name="CertificateServices" state="true" />
+        </package>
+    </servicing>
+    <settings pass="specialize">
+        <component name="Networking-MPSSVC-Svc" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <DomainProfile_EnableFirewall>false</DomainProfile_EnableFirewall>
+            <PrivateProfile_EnableFirewall>false</PrivateProfile_EnableFirewall>
+            <PublicProfile_EnableFirewall>false</PublicProfile_EnableFirewall>
+        </component>
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <ComputerName>$vmname</ComputerName>
+        </component>
+        <component name="Microsoft-Windows-TerminalServices-LocalSessionManager" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <fDenyTSConnections>false</fDenyTSConnections>
+        </component>
+        <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <UserLocale>en-us</UserLocale>
+            <UILanguage>en-us</UILanguage>
+            <SystemLocale>en-us</SystemLocale>
+            <InputLocale>en-us</InputLocale>
+        </component>
+    </settings>
+    <settings pass="oobeSystem">
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <OOBE>
+                <HideEULAPage>true</HideEULAPage>
+                <SkipMachineOOBE>true</SkipMachineOOBE>
+                <SkipUserOOBE>true</SkipUserOOBE>
+                <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+            </OOBE>
+            <UserAccounts>
+                <AdministratorPassword>
+                    <Value>$Password</Value>
+                    <PlainText>true</PlainText>
+                </AdministratorPassword>
+            </UserAccounts>
+        </component>
+    </settings>
+    <cpi:offlineImage cpi:source="" xmlns:cpi="urn:schemas-microsoft-com:cpi" />
+</unattend>
+"@
+
+
+
+Set-Content -Value $Unattend -Path "C:\TempBGPMount\Windows\Panther\Unattend.xml" -Force
+
+Write-Verbose "Enabling Remote Access"
+Enable-WindowsOptionalFeature -Path C:\TempBGPMount -FeatureName RasRoutingProtocols -All -LimitAccess | Out-Null
+Enable-WindowsOptionalFeature -Path C:\TempBGPMount -FeatureName RemoteAccessPowerShell -All -LimitAccess | Out-Null
+Dismount-WindowsImage -Path "C:\TempBGPMount" -Save | Out-Null
+Remove-Item "C:\TempBGPMount"
+
+#### END ANSWER ####
+
+Write-Verbose "Done dismounting; starting VM"
+
+# Start modifying DC VM
+
+Start-VM -Name $VMName      
+
+
+# Test for the DC01 to be back online and responding
+while ((Invoke-Command -VMName DC01 -Credential $localCred {"Test"} -ErrorAction SilentlyContinue) -ne "Test") {
+    Start-Sleep -Seconds 1
+}
+Write-Verbose "DC01 is now online....." -Verbose
+
+
+
+# Provide a password for the VM that you set in the previous step
+Invoke-Command -VMName "DC01" -Credential $localCred -ScriptBlock {
+    # Configure new IP address for DC01 NIC
+    New-NetIPAddress -IPAddress "192.168.0.2" -DefaultGateway "192.168.0.1" -InterfaceAlias "Ethernet" -PrefixLength "24" | Out-Null
+    Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses ("1.1.1.1")
+    $dcIP = Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias "Ethernet" | Select-Object IPAddress
+    Write-Verbose "The currently assigned IPv4 address for DC01 is $($dcIP.IPAddress)" -Verbose 
+    # Update Hostname to DC01
+    #Write-Verbose "Updating Hostname for DC01" -Verbose
+    #Rename-Computer -NewName "DC01"
+}
+
+Write-Verbose "Rebooting DC01 for hostname change to take effect" -Verbose
+Stop-VM -Name DC01
+Start-VM -Name DC01
+
+# Test for the DC01 to be back online and responding
+while ((Invoke-Command -VMName DC01 -Credential $localCred {"Test"} -ErrorAction SilentlyContinue) -ne "Test") {
+    Start-Sleep -Seconds 3
+}
+Write-Verbose "DC01 is now online..." -Verbose
+
+
+$domainName = "cosei.com"
+
+
+# Configure Active Directory on DC01
+Invoke-Command -VMName DC01 -Credential $localCred -ScriptBlock {
+    # Set the Directory Services Restore Mode password
+    $DSRMPWord = ConvertTo-SecureString -String "Password01" -AsPlainText -Force
+    Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools
+    Install-ADDSForest `
+        -CreateDnsDelegation:$false `
+        -DatabasePath "C:\Windows\NTDS" `
+        -DomainMode 7 `
+        -DomainName "cosei.com" `
+        -ForestMode 7 `
+        -InstallDns:$true `
+        -SafeModeAdministratorPassword $DSRMPWord `
+        -LogPath "C:\Windows\NTDS" `
+        -NoRebootOnCompletion:$true `
+        -SysvolPath "C:\Windows\SYSVOL" `
+        -Force:$true
+}
+
+
+
+Write-Verbose "Rebooting DC01 to finish installing of Active Directory" -Verbose
+Stop-VM -Name DC01
+Start-Sleep -Seconds 10
+Start-VM -Name DC01
+
+
+while ((Invoke-Command -VMName DC01 -Credential $localCred {"Test"} -ErrorAction SilentlyContinue) -ne "Test") {
+    Start-Sleep -Seconds 3
+}
+Write-Verbose "DC01 is now online..." -Verbose
+
+Write-Verbose "Setting up HCI OU" -Verbose
+
+### Set up OU ######
+
+$deployAdmin = "AzureAdmin"
+$deployCred = New-Object Management.Automation.PSCredential($deployAdmin, $securePw)
+
+Invoke-Command -VMName DC01 -Credential $localCred -ScriptBlock {
+    # Set the Directory Services Restore Mode password
+    Install-module HCIAdObjectPreCreation -Repository PSGallery -Force -Wait
+    Add-KdsRootKey -EffectiveTime ((Get-Date).addhours(-10))
+    New-HciAdObjectsPreCreation ` 
+        -Deploy `
+        -AsHciDeploymentUserCredential $deployCred `
+        -AsHciDeploymentUserCredential $domainCred `
+        -AsHciOUName "OU=contoso,DC=cosei,DC=com" `
+        -AsHciPhysicalNodeList @("AZSHCINODE01, AZSHCINODE02") `
+        -DomainFQDN "cosei.com" `
+        -AsHciClusterName "cluster1" `
+        -AsHciDeploymentPrefix "hci" 
+    
+}
+
+
+Write-Verbose "HCI OU done" -Verbose
+
+Write-Verbose "Deploying node VMs for cluster" -Verbose
+
+
+
 
 ########## Create node VMs  ###########
 
@@ -42,9 +240,9 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
 
     $parentDisk = "C:\Core\Image\ServerHCI.vhdx"
 
-    New-VHD -Differencing -ParentPath $parentDisk -Path "D:\VMs\$vmname\Virtual Hard Disks\$vmname.vhdx"
+    New-VHD -Differencing -ParentPath $parentDisk -Path "V:\VMs\$vmname\Virtual Hard Disks\$vmname.vhdx"
 
-    New-Vm -Name $vmname -MemoryStartupBytes 8GB -VHDPath "D:\VMs\$vmname\Virtual Hard Disks\$vmname.vhdx" -Generation 2 -Path "D:\VMs\$vmname\"
+    New-Vm -Name $vmname -MemoryStartupBytes 8GB -VHDPath "V:\VMs\$vmname\Virtual Hard Disks\$vmname.vhdx" -Generation 2 -Path "V:\VMs\$vmname\"
 
     #Add second network adapter 
     Add-VmNetworkAdapter -VmName $vmname 
@@ -68,11 +266,11 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
 
 
     # Create data disk for deployment tool  
-    new-VHD -Path "D:\VMs\$vmname\Virtual Hard Disks\data.vhdx" -SizeBytes 127GB 
-    Add-VMHardDiskDrive -VMName $vmname -Path "D:\VMs\$vmname\Virtual Hard Disks\data.vhdx" 
+    new-VHD -Path "V:\VMs\$vmname\Virtual Hard Disks\data.vhdx" -SizeBytes 127GB 
+    Add-VMHardDiskDrive -VMName $vmname -Path "V:\VMs\$vmname\Virtual Hard Disks\data.vhdx" 
     
     # Create the DATA virtual hard disks and attach them
-    $dataDrives = 1..3 | ForEach-Object { New-VHD -Path "D:\VMs\$vmname\Virtual Hard Disks\DATA0$_.vhdx" -Dynamic -SizeBytes 100GB }
+    $dataDrives = 1..3 | ForEach-Object { New-VHD -Path "V:\VMs\$vmname\Virtual Hard Disks\DATA0$_.vhdx" -Dynamic -SizeBytes 100GB }
     $dataDrives | ForEach-Object {
         Add-VMHardDiskDrive -Path $_.path -VMName $vmname
     }
@@ -87,7 +285,7 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
 
     Write-Verbose "Mounting Disk Image and Injecting Answer File into the $VMName VM." 
     New-Item -Path "C:\TempBGPMount" -ItemType Directory | Out-Null
-    Mount-WindowsImage -Path "C:\TempBGPMount" -Index 1 -ImagePath ("D:\VMs\$vmname\Virtual Hard Disks\$vmname.vhdx") | Out-Null
+    Mount-WindowsImage -Path "C:\TempBGPMount" -Index 1 -ImagePath ("V:\VMs\$vmname\Virtual Hard Disks\$vmname.vhdx") | Out-Null
 
     New-Item -Path C:\TempBGPMount\windows -ItemType Directory -Name Panther -Force | Out-Null
 
@@ -213,7 +411,7 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
 write-verbose "Copying cloud folder to $VMName . This will take awhile..."
 $s = New-PSSession -VMName "AZSHCINODE02"  -Credential $localCred
 $HCIPath = "C:\Core\Cloud\"
-Copy-Item $HCIPath –Destination "D:\" -ToSession $s -Recurse
+Copy-Item $HCIPath –Destination "V:\" -ToSession $s -Recurse
 
 write-verbose "Copied cloud folder to $VMPath at $HCIPath"
 
@@ -224,14 +422,14 @@ write-verbose "Copied cloud folder to $VMPath at $HCIPath"
 # 1. log in to AZSHCINODE 02 then run the lines of code
 
 # This takes like 30-45 minutes 
-cd "D:\Cloud\"
+cd "V:\Cloud\"
 .\BootstrapCloudDeploymentTool.ps1
 
 # Future option - try to remotely run the file and return the status when it's done
 
 # Test for more verbose - doesn't update status 
 $seedNodeSession = New-PSSession -VMName "AZSHCINODE02"  -Credential $localCred
-$testCommand = Invoke-Command -Session $seedNodeSession -ScriptBlock {powershell "D:\2209CoreSep8\Cloud\BootstrapCloudDeploymentTool.ps1" }
+$testCommand = Invoke-Command -Session $seedNodeSession -ScriptBlock {powershell "V:\2209CoreSep8\Cloud\BootstrapCloudDeploymentTool.ps1" }
 return $testCommand
 write-verbose "Cloud deployment tool done"
 
@@ -242,7 +440,7 @@ write-verbose "Cloud deployment tool done"
 write-verbose "Copying cloud folder to $VMName . This will take awhile..."
 $s = New-PSSession -VMName "AZSHCINODE02"  -Credential $localCred
 $HCIPath = "C:\Core\Cloud\"
-Copy-Item $HCIPath –Destination "D:\" -FromSession $s -Recurse
+Copy-Item $HCIPath –Destination "V:\" -FromSession $s -Recurse
 
 write-verbose "Copied cloud folder to $VMPath at $HCIPath"
 
@@ -258,7 +456,7 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
     $vmname = $("AZSHCINODE" + $suffix)
 
     Invoke-Command -VMName $vmname -Credential $localcred -ScriptBlock {
-        Add-Computer -DomainName "azshci.com" -Credential $using:domainCred -Force
+        Add-Computer -DomainName "cosei.com" -Credential $using:domainCred -Force
     }
 
     Write-Verbose "Rebooting $vmname for hostname change to take effect" -Verbose
@@ -284,7 +482,7 @@ Start-Sleep -Seconds 45
 #Create a Microsoft Key Distribution Service root key on the domain controller to generate group Managed Service Account passwords.
 
 ######## Join VMs to Domain  ##########
-$domainName = "azshci.com"
+$domainName = "cosei.com"
 $domainAdmin = "$domainName\AzureAdmin"
 $Password = "wacTesting1!"
 $securePw = ConvertTo-SecureString $Password -AsPlainText -Force
@@ -303,7 +501,7 @@ cd "C:\CloudDeployment\Prepare"
         -AsHciDeploymentUserCredential $domainCred `
         -AsHciOUName "OU=test,DC=azshci,DC=com" `
         -AsHciPhysicalNodeList @("AZSHCINODE01, AZSHCINODE02") `
-        -DomainFQDN "azshci.com" `
+        -DomainFQDN "cosei.com" `
         -AsHciClusterName "cluster01" `
         -AsHciDeploymentPrefix "hci" `
 
@@ -330,7 +528,7 @@ $AzureCred = Get-credential
 $AzureCloud="AzureCloud"
 
 # First time, figure out what params are
-cd D:\CloudDeployment\Setup 
+cd V:\CloudDeployment\Setup 
 .\BootstrapCloudDeploymentTool-Internal.ps1
 
 # New builds ask for subscription ID
@@ -346,7 +544,7 @@ cd D:\CloudDeployment\Setup
 
 $domainSession = New-PSSession -VMName "AZSHCINODE02"  -Credential $domainCred
 Invoke-Command -Session $domainSession -ScriptBlock {
-    powershell "D:\2209CoreSep8\Cloud\BootstrapCloudDeploymentTool.ps1" -RegistrationSubscriptionID "e98d0648-f21a-417d-8470-db17aab036a7"}
+    powershell "V:\2209CoreSep8\Cloud\BootstrapCloudDeploymentTool.ps1" -RegistrationSubscriptionID "e98d0648-f21a-417d-8470-db17aab036a7"}
 
 
 
@@ -354,7 +552,7 @@ Invoke-Command -Session $domainSession -ScriptBlock {
 ## Other shit
 
 
-Invoke-Command -VMName "AZSHCINODE02" -Credential $localCred -scriptblock {Expand-Archive -Path "D:\Core\Cloud.zip" -DestinationPath "D:\Core\Cloud"}
+Invoke-Command -VMName "AZSHCINODE02" -Credential $localCred -scriptblock {Expand-Archive -Path "V:\Core\Cloud.zip" -DestinationPath "V:\Core\Cloud"}
 write-verbose "Done unzipping folder"
 
 Expand-Archive -Path "C:\Users\alpease\Desktop\Builds\Core\Cloud\CloudDeployment_10.2209.0.13.zip" -DestinationPath "C:\Users\alpease\Desktop\Builds\Core\Cloud\"
