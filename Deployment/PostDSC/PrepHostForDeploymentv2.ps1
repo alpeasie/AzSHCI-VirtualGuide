@@ -126,7 +126,7 @@ Remove-Item "C:\TempBGPMount"
 
 #### END ANSWER ####
 
-Write-Verbose "Done dismounting; starting VM"
+Write-Verbose "Done dismounting; starting VM" -Verbose
 
 # Start modifying DC VM
 
@@ -168,7 +168,7 @@ $domainName = "cosei.com"
 
 
 # Configure Active Directory on DC01
-Invoke-Command -VMName DC01 -Credential $localCred -ScriptBlock {
+Invoke-Command -VMName DC01 -Credential $localCred1 -ScriptBlock {
     # Set the Directory Services Restore Mode password
     $DSRMPWord = ConvertTo-SecureString -String "Password01" -AsPlainText -Force
     Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools
@@ -190,11 +190,13 @@ Invoke-Command -VMName DC01 -Credential $localCred -ScriptBlock {
 
 Write-Verbose "Rebooting DC01 to finish installing of Active Directory" -Verbose
 Stop-VM -Name DC01
-Start-Sleep -Seconds 10
+Start-Sleep -Seconds 5
 Start-VM -Name DC01
 
 
-while ((Invoke-Command -VMName DC01 -Credential $localCred {"Test"} -ErrorAction SilentlyContinue) -ne "Test") {
+
+
+while ((Invoke-Command -VMName DC01 -Credential $domainCred {"Test"} -ErrorAction SilentlyContinue) -ne "Test") {
     Start-Sleep -Seconds 3
 }
 Write-Verbose "DC01 is now online..." -Verbose
@@ -203,22 +205,28 @@ Write-Verbose "Setting up HCI OU" -Verbose
 
 ### Set up OU ######
 
-$deployAdmin = "AzureAdmin"
-$deployCred = New-Object Management.Automation.PSCredential($deployAdmin, $securePw)
 
-Invoke-Command -VMName DC01 -Credential $localCred -ScriptBlock {
+$domainName = "cosei.com"
+$domainAdmin = "$domainName\administrator"
+$Password = "wacTesting1!"
+$securePw = ConvertTo-SecureString $Password -AsPlainText -Force
+$domainCred = New-Object Management.Automation.PSCredential($domainAdmin, $securePw)
+
+### This is the last block I need to test -- wait till PS gallery is published ####
+Invoke-Command -VMName DC01 -Credential $domainCred -ScriptBlock {
     # Set the Directory Services Restore Mode password
-    Install-module HCIAdObjectPreCreation -Repository PSGallery -Force -Wait
+    Install-PackageProvider -Name NuGet -Force | Out-Null
+    Install-Module -Name HCIAdObjectPreCreation -Repository PSGallery -Force
+
+    $deployAdmin = "AzureAdmin"
+    $Password = "wacTesting1!"
+    $securePw = ConvertTo-SecureString $Password -AsPlainText -Force
+    $deployCred = New-Object Management.Automation.PSCredential($deployAdmin, $securePw)
+    Install-PackageProvider -Name NuGet -Force | Out-Null
+    Install-Module -Name HCIAdObjectPreCreation -Repository PSGallery -Force
     Add-KdsRootKey -EffectiveTime ((Get-Date).addhours(-10))
-    New-HciAdObjectsPreCreation ` 
-        -Deploy `
-        -AsHciDeploymentUserCredential $deployCred `
-        -AsHciDeploymentUserCredential $domainCred `
-        -AsHciOUName "OU=contoso,DC=cosei,DC=com" `
-        -AsHciPhysicalNodeList @("AZSHCINODE01, AZSHCINODE02") `
-        -DomainFQDN "cosei.com" `
-        -AsHciClusterName "cluster1" `
-        -AsHciDeploymentPrefix "hci" 
+    New-HciAdObjectsPreCreation -Deploy -AsHciDeploymentUserCredential $deployCred -AsHciOUName "OU=contoso,DC=cosei,DC=com" -AsHciPhysicalNodeList @("AZSHCINODE01", "AZSHCINODE02") -DomainFQDN "cosei.com" -AsHciClusterName "cluster1"  -AsHciDeploymentPrefix "hci" 
+
     
 }
 
@@ -238,7 +246,9 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
     $suffix = '{0:D2}' -f $i
     $vmname = $("AZSHCINODE" + $suffix)
 
-    $parentDisk = "C:\Core\Image\ServerHCI.vhdx"
+    #$parentDisk = "C:\Core\Image\ServerHCI.vhdx"
+    $parentDisk = "C:\2209\Image\ServerHCI.vhdx"
+
 
     New-VHD -Differencing -ParentPath $parentDisk -Path "V:\VMs\$vmname\Virtual Hard Disks\$vmname.vhdx"
 
@@ -266,8 +276,7 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
 
 
     # Create data disk for deployment tool  
-    new-VHD -Path "V:\VMs\$vmname\Virtual Hard Disks\data.vhdx" -SizeBytes 127GB 
-    Add-VMHardDiskDrive -VMName $vmname -Path "V:\VMs\$vmname\Virtual Hard Disks\data.vhdx" 
+    new-VHD -Path "V:\VMs\$vmname\Virtual Hard Disks\data.vhdx" -SizeBytes 127GB 05
     
     # Create the DATA virtual hard disks and attach them
     $dataDrives = 1..3 | ForEach-Object { New-VHD -Path "V:\VMs\$vmname\Virtual Hard Disks\DATA0$_.vhdx" -Dynamic -SizeBytes 100GB }
@@ -283,7 +292,7 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
 
     # Inject Answer File
 
-    Write-Verbose "Mounting Disk Image and Injecting Answer File into the $VMName VM." 
+    Write-Verbose "Mounting Disk Image and Injecting Answer File into the $VMName VM." -Verbose
     New-Item -Path "C:\TempBGPMount" -ItemType Directory | Out-Null
     Mount-WindowsImage -Path "C:\TempBGPMount" -Index 1 -ImagePath ("V:\VMs\$vmname\Virtual Hard Disks\$vmname.vhdx") | Out-Null
 
@@ -342,10 +351,12 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
   
     Set-Content -Value $Unattend -Path "C:\TempBGPMount\Windows\Panther\Unattend.xml" -Force
 
-    Write-Verbose "Enabling Remote Access"
+    Write-Verbose "Enabling Remote Access" -Verbose
     Enable-WindowsOptionalFeature -Path C:\TempBGPMount -FeatureName RasRoutingProtocols -All -LimitAccess | Out-Null
     Enable-WindowsOptionalFeature -Path C:\TempBGPMount -FeatureName RemoteAccessPowerShell -All -LimitAccess | Out-Null
-    Write-Verbose "Dismounting Disk Image for $VMName VM." 
+
+
+    Write-Verbose "Dismounting Disk Image for $VMName VM." -Verbose
     Dismount-WindowsImage -Path "C:\TempBGPMount" -Save | Out-Null
     Remove-Item "C:\TempBGPMount"
 
@@ -358,7 +369,7 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
         Start-Sleep -Seconds 1
     }
     Write-Verbose "$VMName is now online....." -Verbose
-
+    Write-Verbose "Assigning IP addresses" -Verbose
 
     # Set IP addresses on both VMs
     $newIP = ""
@@ -370,19 +381,19 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
     }
 
     # Add IP addresses
-    $AssignIP = Invoke-Command -VMName $VMName -Credential $localCred -scriptblock {
 
+    Invoke-Command -VMName $VMName -Credential $localCred -scriptblock {
         # Set Static IP
         New-NetIPAddress -IPAddress "$using:newIP" -DefaultGateway "192.168.0.1" -InterfaceAlias "Ethernet" -PrefixLength "24" | Out-Null
         Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses ("192.168.0.2")
         $nodeIP = Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias "Ethernet" | Select-Object IPAddress
         Write-Verbose "The currently assigned IPv4 address for $using:VMName is $($nodeIP.IPAddress)" -Verbose
- 
-    } -AsJob
-
-    $AssignIP | Wait-Job
+    }
 
     Start-Sleep -Seconds 5
+
+    Write-Verbose "IP address assignment done" -Verbose
+    Write-Verbose "Initializing disks on both VMs" -Verbose
 
 
     # Initialize disk on both VMs
@@ -395,164 +406,46 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
         Get-Partition -DiskNumber 1 -PartitionNumber 2 | Set-Partition -NewDriveLetter D 
     }
 
-    write-verbose "Initialized disk on $Vmname"
+    write-verbose "Initialized disk on $Vmname" -Verbose
 
+    # Install Hyper-V on both VMs and enable WinRM
+    Invoke-Command -VMName $VMName -Credential $localCred -scriptblock {    
+        Write-Verbose "Installing Hyper-V" -Verbose
+        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
 
-    Start-Sleep -Seconds 5
+        Write-Verbose "Enabling Windows Remoting"
+        $VerbosePreference = "SilentlyContinue" 
+        Set-Item WSMan:\localhost\Client\TrustedHosts *  -Confirm:$false -Force
+        Enable-PSRemoting | Out-Null
+        $VerbosePreference = "Continue" 
+        write-verbose "Enabled remoting on VM" -Verbose
+        write-verbose "Enabling ICMP" -Verbose
+        netsh advfirewall firewall add rule name="ICMP Allow incoming V4 echo request" protocol="icmpv4:8,any" dir=in action=allow
 
-}
-
-
-####### Set up seed Node (VM 2) ########
-
-
-# Copy build to VM 2 #  NOTE, might be able to put this in the VM for loop and copy without using local creds, 
-
-write-verbose "Copying cloud folder to $VMName . This will take awhile..."
-$s = New-PSSession -VMName "AZSHCINODE02"  -Credential $localCred
-$HCIPath = "C:\Core\Cloud\"
-Copy-Item $HCIPath –Destination "V:\" -ToSession $s -Recurse
-
-write-verbose "Copied cloud folder to $VMPath at $HCIPath"
-
-
-
-############### End of Main SCRIPT ####################
-
-# 1. log in to AZSHCINODE 02 then run the lines of code
-
-# This takes like 30-45 minutes 
-cd "V:\Cloud\"
-.\BootstrapCloudDeploymentTool.ps1
-
-# Future option - try to remotely run the file and return the status when it's done
-
-# Test for more verbose - doesn't update status 
-$seedNodeSession = New-PSSession -VMName "AZSHCINODE02"  -Credential $localCred
-$testCommand = Invoke-Command -Session $seedNodeSession -ScriptBlock {powershell "V:\2209CoreSep8\Cloud\BootstrapCloudDeploymentTool.ps1" }
-return $testCommand
-write-verbose "Cloud deployment tool done"
-
-
-
-####### AFTER RUNNIG CLOUD DEPLOYMENT, TRY COPYING AD tool to AD NODE #######
-
-write-verbose "Copying cloud folder to $VMName . This will take awhile..."
-$s = New-PSSession -VMName "AZSHCINODE02"  -Credential $localCred
-$HCIPath = "C:\Core\Cloud\"
-Copy-Item $HCIPath –Destination "V:\" -FromSession $s -Recurse
-
-write-verbose "Copied cloud folder to $VMPath at $HCIPath"
-
-
-
-
-###### #OLLLDDDDDDDD #####################
-
-
-# Join domain 
-for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
-    $suffix = '{0:D2}' -f $i
-    $vmname = $("AZSHCINODE" + $suffix)
-
-    Invoke-Command -VMName $vmname -Credential $localcred -ScriptBlock {
-        Add-Computer -DomainName "cosei.com" -Credential $using:domainCred -Force
     }
-
-    Write-Verbose "Rebooting $vmname for hostname change to take effect" -Verbose
-    Stop-VM -Name $vmname
     Start-Sleep -Seconds 5
-    Start-VM -Name $vmname
 
 }
 
 
-Start-Sleep -Seconds 45
+####### Set up seed Node (VM 1) ########
 
 
-# STEPS FOR ALEX BUILD SEP 
+# Copy build to VM
+
+write-verbose "Copying cloud folder to AZSHCINODE01. This will take awhile..." -Verbose
+$s = New-PSSession -VMName "AZSHCINODE01" -Credential $localCred
+$HCIPath = "C:\2210\Core\Cloud\"
+# $HCIPath = "C:\Core\Cloud\"
+Copy-Item $HCIPath –Destination "D:\" -ToSession $s -Recurse
+write-verbose "Copied cloud folder to D:\ from $HCIPath" -Verbose
 
 
-
-# OLD
-.\BootstrapCloudDeploymentTool.ps1 -RegistrationSubscriptionID "e98d0648-f21a-417d-8470-db17aab036a7"
-
-# After cloud deploy tool is run, prep AD from seed node (this will change once there is a link to download ADprep)
-
-#Create a Microsoft Key Distribution Service root key on the domain controller to generate group Managed Service Account passwords.
-
-######## Join VMs to Domain  ##########
-$domainName = "cosei.com"
-$domainAdmin = "$domainName\AzureAdmin"
-$Password = "wacTesting1!"
-$securePw = ConvertTo-SecureString $Password -AsPlainText -Force
-$domainCred = New-Object Management.Automation.PSCredential($domainAdmin, $securePw)
-
-Enter-PSSession -ComputerName 192.168.0.5 -credential $domainCred
-
-
-
-Add-KdsRootKey -EffectiveTime ((Get-Date).addhours(-10))
-
-# Cd to CloudDeployment\Prepare and run script
-#### NOTE for future, figure out prefix 
-cd "C:\CloudDeployment\Prepare"
-.\AsHciADArtifactsPreCreationTool.ps1 `
-        -AsHciDeploymentUserCredential $domainCred `
-        -AsHciOUName "OU=test,DC=azshci,DC=com" `
-        -AsHciPhysicalNodeList @("AZSHCINODE01, AZSHCINODE02") `
-        -DomainFQDN "cosei.com" `
-        -AsHciClusterName "cluster01" `
-        -AsHciDeploymentPrefix "hci" `
+# Run cloud deploy tool on VM
+write-verbose "Running the bootstrap script on AZSHCINODE01. This will take around 30 minutes to complete" -Verbose
+Invoke-Command -VMName "AZSHCINODE01" -Credential $localCred -Command {D:\Cloud\BootstrapCloudDeploymentTool.ps1}
+write-verbose "Bootstrap script is done running. You can now start deployment " -Verbose
 
 
 
 
-
-
-
-
-### #END AD prep 
-
-
-
-
-#### OLD code ######
-
-
-
-####### Run script on VM ##############
-
-$SubscriptionID = "e98d0648-f21a-417d-8470-db17aab036a7"
-$AzureCred = Get-credential
-$AzureCloud="AzureCloud"
-
-# First time, figure out what params are
-cd V:\CloudDeployment\Setup 
-.\BootstrapCloudDeploymentTool-Internal.ps1
-
-# New builds ask for subscription ID
-
-
-
-
-
-
-
-##### INVALID CODE ##################
-# OR, try remotely running the code below 
-
-$domainSession = New-PSSession -VMName "AZSHCINODE02"  -Credential $domainCred
-Invoke-Command -Session $domainSession -ScriptBlock {
-    powershell "V:\2209CoreSep8\Cloud\BootstrapCloudDeploymentTool.ps1" -RegistrationSubscriptionID "e98d0648-f21a-417d-8470-db17aab036a7"}
-
-
-
-
-## Other shit
-
-
-Invoke-Command -VMName "AZSHCINODE02" -Credential $localCred -scriptblock {Expand-Archive -Path "V:\Core\Cloud.zip" -DestinationPath "V:\Core\Cloud"}
-write-verbose "Done unzipping folder"
-
-Expand-Archive -Path "C:\Users\alpease\Desktop\Builds\Core\Cloud\CloudDeployment_10.2209.0.13.zip" -DestinationPath "C:\Users\alpease\Desktop\Builds\Core\Cloud\"
