@@ -8,6 +8,20 @@ $securePw = ConvertTo-SecureString $Password -AsPlainText -Force
 $localCred = New-Object Management.Automation.PSCredential($username, $securePw)
 
 
+### Convert ASHCI iso to VHD###
+
+. "C\HelperScripts\Convert-WindowsImage.ps1"
+Convert-WindowsImage -SourcePath "C:\AzHCIVHDs\hcios.iso"  `
+ -Edition "Azure Stack HCI" `
+ -SizeBytes 60GB  `
+ -VHDFormat "VHDX"  `
+ -DiskLayout "UEFI"  `
+ -VHDPath "C:\VHDs\hcios.vhdx"  `
+ -isfixed
+
+Write-Verbose "Done converting iso to VHD"
+
+
 ### Network prep host ####
 # Networking config 
 $HostSwitchName = "InternalDemo"
@@ -24,8 +38,6 @@ New-NetIPAddress -IPAddress 192.168.0.1 -PrefixLength 24 -InterfaceIndex $HostIn
 New-NetNat -Name $NatNetworkName -InternalIPInterfaceAddressPrefix 192.168.0.0/24
 Add-NetNatStaticMapping -NatName $NatNetworkName -ExternalIPAddress 0.0.0.0 -InternalIPAddress 192.168.0.92 -Protocol TCP -ExternalPort 53389 -InternalPort 3389 
 Add-NetNatStaticMapping -NatName $NatNetworkName -ExternalIPAddress 0.0.0.0 -InternalIPAddress 192.168.0.92 -Protocol TCP -ExternalPort 5443 -InternalPort 443 
-
-
 
 
 # Create DC
@@ -222,8 +234,7 @@ Invoke-Command -VMName DC01 -Credential $domainCred -ScriptBlock {
     $Password = "wacTesting1!"
     $securePw = ConvertTo-SecureString $Password -AsPlainText -Force
     $deployCred = New-Object Management.Automation.PSCredential($deployAdmin, $securePw)
-    Install-PackageProvider -Name NuGet -Force | Out-Null
-    Install-Module -Name HCIAdObjectPreCreation -Repository PSGallery -Force
+
     Add-KdsRootKey -EffectiveTime ((Get-Date).addhours(-10))
     New-HciAdObjectsPreCreation -Deploy -AsHciDeploymentUserCredential $deployCred -AsHciOUName "OU=contoso,DC=cosei,DC=com" -AsHciPhysicalNodeList @("AZSHCINODE01", "AZSHCINODE02") -DomainFQDN "cosei.com" -AsHciClusterName "cluster1"  -AsHciDeploymentPrefix "hci" 
 
@@ -235,8 +246,7 @@ Write-Verbose "HCI OU done" -Verbose
 
 Write-Verbose "Deploying node VMs for cluster" -Verbose
 
-
-
+ 
 
 ########## Create node VMs  ###########
 
@@ -246,8 +256,7 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
     $suffix = '{0:D2}' -f $i
     $vmname = $("AZSHCINODE" + $suffix)
 
-    #$parentDisk = "C:\Core\Image\ServerHCI.vhdx"
-    $parentDisk = "C:\2209\Image\ServerHCI.vhdx"
+    $parentDisk = 'C:\VHDs\hcios.vhdx'
 
 
     New-VHD -Differencing -ParentPath $parentDisk -Path "V:\VMs\$vmname\Virtual Hard Disks\$vmname.vhdx"
@@ -435,15 +444,14 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
 
 write-verbose "Copying cloud folder to AZSHCINODE01. This will take awhile..." -Verbose
 $s = New-PSSession -VMName "AZSHCINODE01" -Credential $localCred
-$HCIPath = "C:\2210\Core\Cloud\"
-# $HCIPath = "C:\Core\Cloud\"
+$HCIPath = "C:\Cloud\CloudDeployment"
 Copy-Item $HCIPath –Destination "D:\" -ToSession $s -Recurse
 write-verbose "Copied cloud folder to D:\ from $HCIPath" -Verbose
 
 
 # Run cloud deploy tool on VM
 write-verbose "Running the bootstrap script on AZSHCINODE01. This will take around 30 minutes to complete" -Verbose
-Invoke-Command -VMName "AZSHCINODE01" -Credential $localCred -Command {D:\Cloud\BootstrapCloudDeploymentTool.ps1}
+Invoke-Command -VMName "AZSHCINODE01" -Credential $localCred -Command {D:\Cloud\CloudDeployment\Setup\BootstrapCloudDeploymentTool.ps1}
 write-verbose "Bootstrap script is done running. You can now start deployment " -Verbose
 
 
