@@ -6,12 +6,12 @@ configuration AzSHCIHost
     [String]$targetDrive = "V",
     [String]$targetVMPath = "$targetDrive" + ":\VMs",
     #[String]$build_source="https://github.com/microsoft/AzStackHCISandbox/raw/main/Sandbox/Sandbox.zip",
-    [String]$predeploy_source="https://raw.githubusercontent.com/alpeasie/AzSHCI-VirtualGuide/main/Deployment/PostDSC/PrepHostForDeployment.ps1",
+    [String]$predeploy_source="https://raw.githubusercontent.com/alpeasie/AzSHCI-VirtualGuide/main/Deployment/PostDSC/PrepHostForDeploymentv2.ps1",
     [String]$server2019_uri="https://aka.ms/AAbclsv",
     [string]$hcios_uri="https://aka.ms/2CNBagfhSZ8BM7jyEV8I",
     [String]$wacUri = "https://aka.ms/wacdownload",
     [String]$cloudDeploy_uri = "https://go.microsoft.com/fwlink/?linkid=2210546",
-    [String]$bootstrap_uri = "https://go.microsoft.com/fwlink/?linkid=2210545",
+    #[String]$bootstrap_uri = "https://go.microsoft.com/fwlink/?linkid=2210545",
     [String]$convertImage_uri = "https://raw.githubusercontent.com/x0nn/Convert-WindowsImage/main/Convert-WindowsImage.ps1"
     )
 
@@ -21,11 +21,6 @@ configuration AzSHCIHost
     Import-DscResource -ModuleName 'DSCR_Shortcut'
     Import-DscResource -ModuleName 'cChoco'
     
-  
-    # [System.Management.Automation.PSCredential]$DomainCreds = New-Object System.Management.Automation.PSCredential ("${DomainName}\$($Admincreds.UserName)", $Admincreds.Password)
-    # $ipConfig = (Get-NetAdapter -Physical | Where-Object { $_.InterfaceDescription -like "*Hyper-V*" } | Get-NetIPConfiguration | Where-Object IPv4DefaultGateway)
-    # $netAdapters = Get-NetAdapter -Name ($ipConfig.InterfaceAlias) | Select-Object -First 1
-    # $InterfaceAlias = $($netAdapters.Name)
 
     Node localhost
     {
@@ -119,11 +114,11 @@ configuration AzSHCIHost
             DependsOn="[File]Apps"
         }
 
-        xRemoteFile "Bootstrap" {
-            uri=$bootstrap_uri
-            DestinationPath="$env:SystemDrive\Cloud\CloudDeployment.zip"
-            DependsOn="[File]Cloud"
-        }
+        # xRemoteFile "Bootstrap" {
+        #     uri=$bootstrap_uri
+        #     DestinationPath="$env:SystemDrive\Cloud\CloudDeployment.zip"
+        #     DependsOn="[File]Cloud"
+        # }
 
         xRemoteFile "ConvertImage" {
             uri=$convertImage_uri
