@@ -95,7 +95,7 @@ configuration AzSHCIHost
    
         xRemoteFile "CloudDeploy" {
             uri=$cloudDeploy_uri
-            DestinationPath="$env:SystemDrive\Cloud\BootstrapCloudDeploymentTool.ps1"
+            DestinationPath="$env:SystemDrive\Cloud\CloudDeployment.zip"
             DependsOn="[File]Cloud"
         }
 

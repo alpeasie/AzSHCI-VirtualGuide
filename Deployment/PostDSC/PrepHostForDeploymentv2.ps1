@@ -10,8 +10,8 @@ $localCred = New-Object Management.Automation.PSCredential($username, $securePw)
 
 ### Convert ASHCI iso to VHD###
 
-. "C\HelperScripts\Convert-WindowsImage.ps1"
-Convert-WindowsImage -SourcePath "C:\AzHCIVHDs\hcios.iso"  `
+. "C:\HelperScripts\Convert-WindowsImage.ps1"
+Convert-WindowsImage -SourcePath "C:\VHDs\hcios.iso"  `
  -Edition "Azure Stack HCI" `
  -SizeBytes 60GB  `
  -VHDFormat "VHDX"  `
