@@ -1,15 +1,14 @@
 configuration AzSHCIHost
 {
     param ( 
+    #[Parameter(Mandatory)]
     [System.Management.Automation.PSCredential]$Admincreds,
     [String]$targetDrive = "V",
     [String]$targetVMPath = "$targetDrive" + ":\VMs",
-    [String]$predeploy_source="https://raw.githubusercontent.com/alpeasie/AzSHCI-VirtualGuide/main/Deployment/PostDSC/PrepHostForDeploymentv2.ps1",
+    #[String]$build_source="https://github.com/microsoft/AzStackHCISandbox/raw/main/Sandbox/Sandbox.zip",
+    [String]$predeploy_source="https://raw.githubusercontent.com/alpeasie/AzSHCI-VirtualGuide/main/Deployment/PostDSC/PrepHostForDeployment.ps1",
     [String]$server2019_uri="https://aka.ms/AAbclsv",
-    [string]$hcios_uri="https://aka.ms/2CNBagfhSZ8BM7jyEV8I",
-    [String]$wacUri = "https://aka.ms/wacdownload",
-    [String]$cloudDeploy_uri = "https://go.microsoft.com/fwlink/?linkid=2210546",
-    [String]$convertImage_uri = "https://raw.githubusercontent.com/x0nn/Convert-WindowsImage/main/Convert-WindowsImage.ps1"
+    [String]$wacUri = "https://aka.ms/wacdownload"
     )
 
     Import-DscResource -ModuleName 'PSDesiredStateConfiguration'
@@ -18,6 +17,12 @@ configuration AzSHCIHost
     Import-DscResource -ModuleName 'DSCR_Shortcut'
     Import-DscResource -ModuleName 'cChoco'
     
+  
+    # [System.Management.Automation.PSCredential]$DomainCreds = New-Object System.Management.Automation.PSCredential ("${DomainName}\$($Admincreds.UserName)", $Admincreds.Password)
+
+    # $ipConfig = (Get-NetAdapter -Physical | Where-Object { $_.InterfaceDescription -like "*Hyper-V*" } | Get-NetIPConfiguration | Where-Object IPv4DefaultGateway)
+    # $netAdapters = Get-NetAdapter -Name ($ipConfig.InterfaceAlias) | Select-Object -First 1
+    # $InterfaceAlias = $($netAdapters.Name)
 
     Node localhost
     {
@@ -49,75 +54,63 @@ configuration AzSHCIHost
             Type            = 'Directory'
             DestinationPath = "$targetVMPath"
             DependsOn       = "[Script]FormatDisk"
+            
         }
     
         File "HCI" {
             Type            = 'Directory'
             DestinationPath = "$env:SystemDrive\HCI"
             DependsOn       = "[Script]FormatDisk"
+            
         }
 
         File "VHDs" {
             Type            = 'Directory'
             DestinationPath = "$env:SystemDrive\VHDs"
             DependsOn       = "[Script]FormatDisk"
+            
         }
 
         File "Apps" {
             Type            = 'Directory'
             DestinationPath = "$env:SystemDrive\Apps"
             DependsOn       = "[Script]FormatDisk"
+            
         }
 
-        File "Cloud" {
-            Type            = 'Directory'
-            DestinationPath = "$env:SystemDrive\Cloud"
-            DependsOn       = "[Script]FormatDisk"
-        }
-
-        File "HelperScripts" {
-            Type            = 'Directory'
-            DestinationPath = "$env:SystemDrive\HelperScripts"
-            DependsOn       = "[Script]FormatDisk"
-        }
-
-        xRemoteFile "Server2019VHD" {
+        xRemoteFile "Server2019VHD"{
             uri=$server2019_uri
             DestinationPath="$env:SystemDrive\VHDs\GUI.vhdx"
             DependsOn="[File]VHDs"
         }
    
-        xRemoteFile "AzsIso" {
-            uri=$hcios_uri
-            DestinationPath="$env:SystemDrive\VHDs\hcios.iso"
-            DependsOn="[File]VHDs"
-        }
+        # Uncomment when HCI iso is public 
+        # xRemoteFile "ASHCIVHD"{
+        #     uri=$ashci_21h2
+        #     DestinationPath="$env:SystemDrive\AzHCIVHDs\AZSHCI.vhdx"
+        #     DependsOn="[File]ASHCIBuildScripts"
+        # }
    
-        xRemoteFile "CloudDeploy" {
-            uri=$cloudDeploy_uri
-            DestinationPath="$env:SystemDrive\Cloud\BootstrapCloudDeploymentTool.ps1"
-            DependsOn="[File]Cloud"
+        xRemoteFile "ASHCIBuildScripts"{
+            uri=$predeploy_source
+            DestinationPath="$env:SystemDrive\HCI\PrepHostForDeployment.ps1"
+            DependsOn="[File]HCI"
         }
 
-        xRemoteFile "WAC_Source"{
-            uri=$wacURI
-            DestinationPath="$env:SystemDrive\Apps\WindowsAdminCenter.msi"
-            DependsOn="[File]Apps"
-        }
 
-        xRemoteFile "ConvertImage" {
-            uri=$convertImage_uri
-            DestinationPath="$env:SystemDrive\HelperScripts\Convert-WindowsImage.ps1"
-            DependsOn="[File]HelperScripts"
-        }
-        
-        Archive "UnzipCloudDeploy" {
-            Ensure = "Present"
-            Path="$env:SystemDrive\Cloud\CloudDeployment.zip"
-            Destination = "$env:SystemDrive\Cloud\CloudDeployment"
-            DependsOn = "[xRemoteFile]CloudDeploy"
-        }
+        # Uncomment if you need a whole folder, not just a script
+        # xRemoteFile "ASHCIBuildScripts"{
+        #     uri=$build_source
+        #     DestinationPath="$env:SystemDrive\HCI\Deploy.zip"
+        #     DependsOn="[File]Deploy"
+        # }
 
+        # Archive "ASHCIBuildScripts" {
+        #     Path="$env:SystemDrive\HCI\Deploy.zip"
+        #     Destination="$env:SystemDrive\HCI\Deploy"
+        #     DependsOn="[xRemoteFile]ASHCIBuildScripts"
+
+        # }
 
         # cShortcut "BuildScript" {
         #     Path="C:\Users\Public\Desktop\PrepHostForDeployment.lnk"
@@ -127,6 +120,12 @@ configuration AzSHCIHost
         #     DependsOn="[xRemoteFile]ASHCIBuildScripts"
 
         # }
+
+        xRemoteFile "WAC_Source"{
+            uri=$wacURI
+            DestinationPath="$env:SystemDrive\Apps\WindowsAdminCenter.msi"
+            DependsOn="[File]Apps"
+        }
 
         # cShortcut "Wac Shortcut"
         # {
