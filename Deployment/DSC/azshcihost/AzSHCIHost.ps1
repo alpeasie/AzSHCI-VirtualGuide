@@ -126,7 +126,7 @@ configuration AzSHCIHost
             Target="$env:SystemDrive\Scripts\PrepHostForDeployment.ps1"
             WorkingDirectory="C:\Scripts"
             Icon='shell32.dll,277'
-            DependsOn="[xRemoteFile]ASHCIBuildScripts"
+            DependsOn="[xRemoteFile]PredeployScript"
 
         }
 
