@@ -4,11 +4,13 @@ configuration AzSHCIHost
     [System.Management.Automation.PSCredential]$Admincreds,
     [String]$targetDrive = "V",
     [String]$targetVMPath = "$targetDrive" + ":\VMs",
-    [String]$predeploy_source="https://raw.githubusercontent.com/alpeasie/AzSHCI-VirtualGuide/main/Deployment/PostDSC/PrepHostForDeploymentv2.ps1",
-    [String]$server2019_uri="https://aka.ms/AAbclsv",
+    [String]$predeploy_source="https://raw.githubusercontent.com/alpeasie/AzSHCI-VirtualGuide/main/Deployment/PostDSC/PrepHostForDeployment.ps1",
+    #[String]$gui_server2019_uri="https://aka.ms/AAbclsv",
+    [String]$server2019_uri="https://go.microsoft.com/fwlink/p/?linkid=2195334&clcid=0x409&culture=en-us&country=us"
+    #[string]$23h2hcios_uri="https://aka.ms/2CNBagfhSZ8BM7jyEV8I",
     [string]$hcios_uri="https://aka.ms/2CNBagfhSZ8BM7jyEV8I",
     [String]$wacUri = "https://aka.ms/wacdownload",
-    [String]$cloudDeploy_uri = "https://go.microsoft.com/fwlink/?linkid=2210546",
+   #[String]$cloudDeploy_uri = "https://go.microsoft.com/fwlink/?linkid=2210546",
     [String]$convertImage_uri = "https://raw.githubusercontent.com/x0nn/Convert-WindowsImage/main/Convert-WindowsImage.ps1"
     )
 
@@ -50,12 +52,6 @@ configuration AzSHCIHost
             DestinationPath = "$targetVMPath"
             DependsOn       = "[Script]FormatDisk"
         }
-    
-        File "HCI" {
-            Type            = 'Directory'
-            DestinationPath = "$env:SystemDrive\HCI"
-            DependsOn       = "[Script]FormatDisk"
-        }
 
         File "VHDs" {
             Type            = 'Directory'
@@ -75,9 +71,9 @@ configuration AzSHCIHost
             DependsOn       = "[Script]FormatDisk"
         }
 
-        File "HelperScripts" {
+        File "Scripts" {
             Type            = 'Directory'
-            DestinationPath = "$env:SystemDrive\HelperScripts"
+            DestinationPath = "$env:SystemDrive\Scripts"
             DependsOn       = "[Script]FormatDisk"
         }
 
@@ -93,11 +89,19 @@ configuration AzSHCIHost
             DependsOn="[File]VHDs"
         }
    
-        xRemoteFile "CloudDeploy" {
-            uri=$cloudDeploy_uri
-            DestinationPath="$env:SystemDrive\Cloud\CloudDeployment.zip"
-            DependsOn="[File]Cloud"
-        }
+        # Remote file removed from script to download from VM
+        # xRemoteFile "CloudDeploy" {
+        #     uri=$cloudDeploy_uri
+        #     DestinationPath="$env:SystemDrive\Cloud\CloudDeployment.zip"
+        #     DependsOn="[File]Cloud"
+        # }
+
+        # Archive "UnzipCloudDeploy" {
+        #     Ensure = "Present"
+        #     Path="$env:SystemDrive\Cloud\CloudDeployment.zip"
+        #     Destination = "$env:SystemDrive\Cloud\CloudDeployment"
+        #     DependsOn = "[xRemoteFile]CloudDeploy"
+        # }
 
         xRemoteFile "WAC_Source"{
             uri=$wacURI
@@ -105,28 +109,27 @@ configuration AzSHCIHost
             DependsOn="[File]Apps"
         }
 
+        xRemoteFile "PredeployScript" {
+            uri=$predeploy_source
+            DestinationPath="$env:SystemDrive\Scripts\PrepHostForDeployment.ps1"
+            DependsOn="[File]Scripts"
+        }
+
         xRemoteFile "ConvertImage" {
             uri=$convertImage_uri
-            DestinationPath="$env:SystemDrive\HelperScripts\Convert-WindowsImage.ps1"
-            DependsOn="[File]HelperScripts"
+            DestinationPath="$env:SystemDrive\Scripts\Convert-WindowsImage.ps1"
+            DependsOn="[File]Scripts"
         }
         
-        Archive "UnzipCloudDeploy" {
-            Ensure = "Present"
-            Path="$env:SystemDrive\Cloud\CloudDeployment.zip"
-            Destination = "$env:SystemDrive\Cloud\CloudDeployment"
-            DependsOn = "[xRemoteFile]CloudDeploy"
+
+        cShortcut "BuildScript" {
+            Path="C:\Users\Public\Desktop\PrepHostForDeployment.lnk"
+            Target="$env:SystemDrive\Scripts\PrepHostForDeployment.ps1"
+            WorkingDirectory="C:\Scripts"
+            Icon='shell32.dll,277'
+            DependsOn="[xRemoteFile]ASHCIBuildScripts"
+
         }
-
-
-        # cShortcut "BuildScript" {
-        #     Path="C:\Users\Public\Desktop\PrepHostForDeployment.lnk"
-        #     Target="C:\HCI\Deployment\PostDSC\PrepHostForDeployment.ps1"
-        #     WorkingDirectory="C:\HCI\Deployment"
-        #     Icon='shell32.dll,277'
-        #     DependsOn="[xRemoteFile]ASHCIBuildScripts"
-
-        # }
 
         # cShortcut "Wac Shortcut"
         # {
@@ -284,32 +287,6 @@ configuration AzSHCIHost
             DependsOn         = "[xCredSSP]Server"
             SuppressReboot    = $true
         }
-
-       #### INSTALL CHOCO, DEPLOY EDGE and Shortcuts
-
-        # cChocoInstaller InstallChoco {
-        #     InstallDir = "c:\choco"
-        # }
-            
-        # cChocoFeature allowGlobalConfirmation {
-        #     FeatureName = "allowGlobalConfirmation"
-        #     Ensure      = 'Present'
-        #     DependsOn   = '[cChocoInstaller]installChoco'
-        # }
-        
-        # cChocoFeature useRememberedArgumentsForUpgrades {
-        #     FeatureName = "useRememberedArgumentsForUpgrades"
-        #     Ensure      = 'Present'
-        #     DependsOn   = '[cChocoInstaller]installChoco'
-        # }
-        
-        # cChocoPackageInstaller "Install Chromium Edge" {
-        #     Name        = 'microsoft-edge'
-        #     Ensure      = 'Present'
-        #     AutoUpgrade = $true
-        #     DependsOn   = '[cChocoInstaller]installChoco'
-        # }
-
 
     }
 }
