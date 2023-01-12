@@ -13,7 +13,7 @@ $localCred = New-Object Management.Automation.PSCredential($username, $securePw)
 . "C:\Scripts\Convert-WindowsImage.ps1"
 Convert-WindowsImage -SourcePath "C:\VHDs\hcios.iso"  `
  -Edition "Azure Stack HCI" `
- -SizeBytes 60GB  `
+ #-SizeBytes 60GB  `
  -VHDFormat "VHDX"  `
  -DiskLayout "UEFI"  `
  -VHDPath "C:\VHDs\hcios.vhdx"  `
@@ -134,7 +134,8 @@ Write-Verbose "Enabling Remote Access"
 Enable-WindowsOptionalFeature -Path C:\TempBGPMount -FeatureName RasRoutingProtocols -All -LimitAccess | Out-Null
 Enable-WindowsOptionalFeature -Path C:\TempBGPMount -FeatureName RemoteAccessPowerShell -All -LimitAccess | Out-Null
 Dismount-WindowsImage -Path "C:\TempBGPMount" -Save | Out-Null
-Remove-Item "C:\TempBGPMount"
+Remove-Item "C:\TempBGPMount" -Recurse -Force
+
 
 #### END ANSWER ####
 
@@ -355,7 +356,7 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
 
     Write-Verbose "Dismounting Disk Image for $VMName VM." -Verbose
     Dismount-WindowsImage -Path "C:\TempBGPMount" -Save | Out-Null
-    Remove-Item "C:\TempBGPMount"
+    Remove-Item "C:\TempBGPMount" -Recurse -Force
 
     # Restarting the VM
     Stop-VM -Name $VMName
