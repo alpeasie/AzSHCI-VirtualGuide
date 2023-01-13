@@ -22,7 +22,7 @@ Step 2: Download the RDP file for the VM and sign in using
 Step 3: Run the "PrepHostForDeployment" script on desktop. 
 
  - If the powershell window looks like it's freezing, click on the windowo and type in a key on your keyboard. This should unfreeze this script. 
- - The script takes about 1 hour to run. 
+ - The script takes about 1-2 hours to run. 
 
 
 ![image](https://user-images.githubusercontent.com/34490917/212422506-5e4fe716-ea97-425c-ba41-771f8cce1d9b.png)
