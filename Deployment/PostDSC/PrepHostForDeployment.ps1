@@ -444,14 +444,25 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
 write-verbose "Node setup complete" -Verbose
 
 
-### Install WAC####
-#$ProgressPreference = "SilentlyContinue"
+### Install WAC and create desktop icon#####
 $msiArgs = @("/i", "C:\Apps\WindowsAdminCenter.msi", "/qn", "/L*v", "log.txt", "SME_PORT=443", "SSL_CERTIFICATE_OPTION=generate")
 Start-Process msiexec.exe -Wait -ArgumentList $msiArgs
 write-verbose "Done installing WAC"
 
+$TargetFile = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+$ShortcutFile = 'C:\Users\Public\Desktop\Windows Admin Center.lnk'
+$WScriptShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WScriptShell.CreateShortcut($ShortcutFile)
+$Shortcut.TargetPath = $TargetFile
+$Shortcut.Arguments = "https://$env:computerName"
+$Shortcut.Save()
+
+write-verbose "Created desktop shortcut"
 
 ####### Set up seed Node (VM 1) ########
+
+#Disable need to run IE first launch to allow invoke-command to work 
+Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Internet Explorer\Main" -Name "DisableFirstRunCustomize" -Value 2
 
 write-verbose "Downoading cloud deploy files to AZSHCINODE01"
 
@@ -468,7 +479,7 @@ Invoke-Command -VMName "AZSHCINODE01" -Credential $localCred -scriptblock {
             [Parameter(Mandatory=$true)]
             [String]$URL
         )
-        $download = Invoke-Webrequest -Method Head -Uri $URL 
+        $download = Invoke-Webrequest -Method Head -Uri $URL -UseBasicParsing 
         $content = [System.Net.Mime.ContentDisposition]::new($download.Headers["Content-Disposition"])
         $fileName = $content.FileName
         return $fileName
@@ -500,3 +511,5 @@ Invoke-Command -VMName "AZSHCINODE01" -Credential $localCred -Command {D:\Cloud\
 write-verbose "Bootstrap script is done running. You can now start deployment " -Verbose
 
 write-verbose "Open edge and type in https://192.168.0.3 to start deployment" -Verbose
+
+Pause
