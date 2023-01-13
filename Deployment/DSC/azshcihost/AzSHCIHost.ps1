@@ -9,7 +9,6 @@ configuration AzSHCIHost
     #[String]$server2019_uri="https://go.microsoft.com/fwlink/p/?linkid=2195334&clcid=0x409&culture=en-us&country=us",
     [string]$hcios_uri="https://aka.ms/2CNBagfhSZ8BM7jyEV8I",
     [String]$wacUri = "https://aka.ms/wacdownload",
-   #[String]$cloudDeploy_uri = "https://go.microsoft.com/fwlink/?linkid=2210546",
     [String]$convertImage_uri = "https://raw.githubusercontent.com/x0nn/Convert-WindowsImage/main/Convert-WindowsImage.ps1"
     )
 

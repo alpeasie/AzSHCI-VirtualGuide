@@ -13,7 +13,7 @@ $localCred = New-Object Management.Automation.PSCredential($username, $securePw)
 . "C:\Scripts\Convert-WindowsImage.ps1"
 Convert-WindowsImage -SourcePath "C:\VHDs\hcios.iso"  `
  -Edition "Azure Stack HCI" `
- #-SizeBytes 60GB  `
+ -SizeBytes 60GB  `
  -VHDFormat "VHDX"  `
  -DiskLayout "UEFI"  `
  -VHDPath "C:\VHDs\hcios.vhdx"  `
@@ -21,6 +21,7 @@ Convert-WindowsImage -SourcePath "C:\VHDs\hcios.iso"  `
 
 Write-Verbose "Done converting iso to VHD"
 
+Start-Sleep 5
 
 ### Network prep host ####
 # Networking config 
@@ -40,6 +41,7 @@ Add-NetNatStaticMapping -NatName $NatNetworkName -ExternalIPAddress 0.0.0.0 -Int
 Add-NetNatStaticMapping -NatName $NatNetworkName -ExternalIPAddress 0.0.0.0 -InternalIPAddress 192.168.0.92 -Protocol TCP -ExternalPort 5443 -InternalPort 443 
 
 
+write-verbose "done with network config"
 # Create DC
 
 ### Run DC script ###
@@ -360,7 +362,6 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
 
     # Restarting the VM
     Stop-VM -Name $VMName
-
     Write-Verbose "Starting $VMName VM." -Verbose
     Start-VM -Name $VMName
 
@@ -411,9 +412,9 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
     write-verbose "Initialized disk on $Vmname" -Verbose
 
     # Install Hyper-V on both VMs and enable WinRM
-    Invoke-Command -VMName $VMName -Credential $localCred -scriptblock {    
+    Invoke-Command -VMName $VMName -Credential $localCred -scriptblock { 
         Write-Verbose "Installing Hyper-V" -Verbose
-        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
+        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All -NoRestart
 
         Write-Verbose "Enabling Windows Remoting"
         $VerbosePreference = "SilentlyContinue" 
@@ -423,8 +424,19 @@ for ($i = 1; $i -lt $azsHostCount + 1; $i++) {
         write-verbose "Enabled remoting on VM" -Verbose
         write-verbose "Enabling ICMP" -Verbose
         netsh advfirewall firewall add rule name="ICMP Allow incoming V4 echo request" protocol="icmpv4:8,any" dir=in action=allow
-
     }
+
+    # Restarting the VM
+    Stop-VM -Name $VMName
+    Write-Verbose "Starting $VMName VM." -Verbose
+    Start-VM -Name $VMName
+
+    while ((Invoke-Command -VMName $vmname -Credential $localCred {"Test"} -ErrorAction SilentlyContinue) -ne "Test") {
+        Start-Sleep -Seconds 3
+    }
+    Write-Verbose "$VMName is now online....." -Verbose
+    Write-Verbose "Assigning IP addresses" -Verbose
+
     Start-Sleep -Seconds 5
 
 }
@@ -436,45 +448,55 @@ write-verbose "Node setup complete" -Verbose
 #$ProgressPreference = "SilentlyContinue"
 $msiArgs = @("/i", "C:\Apps\WindowsAdminCenter.msi", "/qn", "/L*v", "log.txt", "SME_PORT=443", "SSL_CERTIFICATE_OPTION=generate")
 Start-Process msiexec.exe -Wait -ArgumentList $msiArgs
-Write-Output "done installing WAC"
+write-verbose "Done installing WAC"
 
 
 ####### Set up seed Node (VM 1) ########
 
-# Write-Output "Downoading cloud deployment folder to AZSHCINODE01"
+write-verbose "Downoading cloud deploy files to AZSHCINODE01"
 
-# Invoke-Command -VMName "AZSHCINODE01" -Credential $localCred -scriptblock {    
-#     $cloudDeploy_uri = "https://go.microsoft.com/fwlink/?linkid=2210546"
-#     $outFile = "D:\Cloud\CloudDeployment.zip"
-#     $wc = New-Object net.webclient
-#     $wc.Downloadfile($cloudDeploy_uri, $outFile)
-#     Write-Output "Done downloading"
-#     Expand-Archive -LiteralPath $outFile -DestinationPath D:\Cloud\CloudDeployment
-# }
+Invoke-Command -VMName "AZSHCINODE01" -Credential $localCred -scriptblock {  
+    $dir = "D:\Cloud\"
+    mkdir $dir
+    
+    $verify_url = "https://go.microsoft.com/fwlink/?linkid=2210608"
+    $bootstrap_url = "https://go.microsoft.com/fwlink/?linkid=2210545"
+    $cloudDeploy_url = "https://go.microsoft.com/fwlink/?linkid=2210546"
+    
+    Function Get-FileName {
+        Param (
+            [Parameter(Mandatory=$true)]
+            [String]$URL
+        )
+        $download = Invoke-Webrequest -Method Head -Uri $URL 
+        $content = [System.Net.Mime.ContentDisposition]::new($download.Headers["Content-Disposition"])
+        $fileName = $content.FileName
+        return $fileName
+    }
+    
+    $verifyFileName = Get-FileName $verify_url
+    $bootstrapFileName = Get-FileName $bootstrap_url
+    $cloudDeployFileName = Get-FileName $cloudDeploy_url
+    
+    $verifyOutFile = $filename = Join-Path $dir -ChildPath $verifyFileName
+    $bootstrapOutFile = $filename = Join-Path $dir -ChildPath $bootstrapFileName
+    $cloudDeployOutFile = $filename = Join-Path $dir -ChildPath $cloudDeployFileName
+    
+    write-verbose "Downloading $verifyFileName and $bootstrapFileName to D drive"
+    
+    Invoke-WebRequest -uri $verify_url -OutFile $verifyOutFile
+    Invoke-WebRequest -uri $bootstrap_url -OutFile $bootstrapOutFile
+    
+    write-verbose "Downloading $cloudDeployFileName to D drive"
+    
+    $wc = New-Object net.webclient
+    $wc.Downloadfile($cloudDeploy_url, $cloudDeployOutFile)
+    write-verbose "Done downloading cloud deploy folder"
+    
+}
 
+write-verbose "Running the bootstrap script on AZSHCINODE01. This will take around 30 minutes to complete" -Verbose
+Invoke-Command -VMName "AZSHCINODE01" -Credential $localCred -Command {D:\Cloud\BootstrapCloudDeploymentTool.ps1}
+write-verbose "Bootstrap script is done running. You can now start deployment " -Verbose
 
-
-## 22H2 Script###
-# write-verbose "Running the bootstrap script on AZSHCINODE01. This will take around 30 minutes to complete" -Verbose
-# Invoke-Command -VMName "AZSHCINODE01" -Credential $localCred -Command {D:\Cloud\CloudDeployment\Setup\BootstrapCloudDeploymentTool.ps1 }
-# write-verbose "Bootstrap script is done running. You can now start deployment " -Verbose
-
-
-
-
-
-# Run cloud deploy tool on VM for 23H2
-# write-verbose "Running the bootstrap script on AZSHCINODE01. This will take around 30 minutes to complete" -Verbose
-# Invoke-Command -VMName "AZSHCINODE01" -Credential $localCred -Command {D:\Cloud\CloudDeployment\Setup\BootstrapAzureStackDeployment.ps1}
-# write-verbose "Bootstrap script is done running. You can now start deployment " -Verbose
-
-# Invoke-Command -VMName "AZSHCINODE01" -Credential $localCred -Command {D:\Cloud\CloudDeployment\Setup\BootstrapCloudDeploymentTool-Internal.ps1}
-# .\BootstrapAzureStackDeployment.ps1
-# .\BootstrapCloudDeploymentTool-Internal.ps1
-# Copy build to VM
-
-# write-verbose "Copying cloud folder to AZSHCINODE01. This will take awhile..." -Verbose
-# $s = New-PSSession -VMName "AZSHCINODE01" -Credential $localCred
-# $HCIPath = "C:\Cloud\CloudDeployment"
-# Copy-Item $HCIPath –Destination "D:\" -ToSession $s -Recurse
-# write-verbose "Copied cloud folder to D:\ from $HCIPath" -Verbose
+write-verbose "Open edge and type in https://192.168.0.3 to start deployment" -Verbose
