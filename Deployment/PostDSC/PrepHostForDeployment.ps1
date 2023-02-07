@@ -141,7 +141,7 @@ Remove-Item "C:\TempBGPMount" -Recurse -Force
 
 #### END ANSWER ####
 
-Write-Verbose "Done dismounting; starting VM" -Verbose
+Write-Verbose "Done dismounting; starting VM.. If the powershell window looks stuck here, press any key to continue" -Verbose
 
 # Start modifying DC VM
 
